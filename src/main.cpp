@@ -10,7 +10,7 @@ using namespace std;
 
 int convert(Ast *ast, Token t){
 	string str;
-	switch(t.type){
+	switch(t.getType()) {
 	case Type::NON_TERMINAL:
 		str = "nonterminal";
 		break;
@@ -69,8 +69,8 @@ int main(int argc, char** argv){
 		return 1;
 	}
 	Lexer lex(file);
-	Parser parser(lex);
-	Ast* ast = parser.parse();
+	Parser parser;
+	Ast* ast = parser.parse(lex);
 	if(ast != nullptr){
 		map<string, bool> mp;
 		string start = ast->startSymbol();

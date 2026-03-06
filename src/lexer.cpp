@@ -29,32 +29,27 @@ void Lexer::skipWhiteSpace(){
 	}
 }
 
-string Lexer::parseNonTerminal(){
-	string value;
+void Lexer::parseNonTerminal(string& value){
+	value.clear();
 
 	while((current >= 'A' && current <= 'Z') || current == '_'){
 		value += current;
 		advance();
 	}
-
-	return value;
 }
 
-string Lexer::parseTerminal(){
-	string value;
+void Lexer::parseTerminal(string& value){
+	value.clear();
 
 	while((current >= 'a' && current <= 'z') || current == '_'){
 		value += current;
 		advance();
 	}
-
-	return value;
 }
 
 Lexer::Lexer(FILE* file){
 	this->file = file;
 	current = fgetc(file);
-	processed = 0;
 }
 
 Token Lexer::peek(){
@@ -63,69 +58,51 @@ Token Lexer::peek(){
 	skipWhiteSpace();
 	switch(current){
 		case ':':{
-			enum Type type = COLON;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(COLON);
 		}
 		case '|':{
-			enum Type type = OR;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(OR);
 		}
 		case '[':{
-			enum Type type = OBRACKET;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(OBRACKET);
 		}
 		case ']':{
-			enum Type type = CBRACKET;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(CBRACKET);
 		}
 		case '{':{
-			enum Type type = OBRACE;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(OBRACE);
 		}
 		case '}':{
-			enum Type type = CBRACE;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(CBRACE);
 		}
 		case '(':{
-			enum Type type = OPAREN;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(OPAREN);
 		}
 		case ')':{
-			enum Type type = CPAREN;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(CPAREN);
 		}
 		case ';':{
-			enum Type type = SEMI_COLON;
-			Token t(type);
 			advance();
-			return prev = t;
+			return prev = Token(SEMI_COLON);
 		}
 		case EOF:{
 			return prev = Token(END);
 		}
 		default: {
-			string* value = new string();
+			string *value = new string();
 			if(current >= 'a' && current <= 'z'){
-				*value = parseTerminal();
+				parseTerminal(*value);
 				return prev = Token(TERMINAL, value);
 			}else if(current >= 'A' && current <= 'Z'){
-				*value = parseNonTerminal();
+				parseNonTerminal(*value);
 				return prev = Token(NON_TERMINAL, value);
 			}else{
 				return prev = Token(UNIDENTIFIED_TOK);

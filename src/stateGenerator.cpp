@@ -1,11 +1,11 @@
-using namespace std;
-
 #include <stateGenerator.hpp>
 #include <queue>
 #include <set>
 #include <iostream>
 #include <climits>
 #include <store.hpp>
+
+using namespace std;
 
 /******** State ************/
 
@@ -298,20 +298,6 @@ State& StateGenerator::computeClosure(State& kernel){
 
 bool StateGenerator::generateStateTable(){
 	//	Bootstrap
-	for(int i = 0; i < _ast.termStore.size(); i++){
-		cout << i << " " << _ast.termStore.query(i).getName() << endl;
-	}
-	cout << endl << endl;
-
-	for(int i = 0; i < _ast.termStore.size(); i++){
-		cout << _ast.termStore.query(i).getName() << " [";
-		for(auto& str: firstOf(i)){
-			cout << str << ",";
-		}
-		cout << "]\n";
-	}
-	cout << endl << endl;
-
 	StateComponent sc(*_ast.getDefinition(_ast.startSymbol())[0]);
 	sc.followSet().insert(_ast.termStore.query("$"));
 	State s = State::createStartState(sc);
