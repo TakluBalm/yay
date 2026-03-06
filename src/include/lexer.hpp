@@ -40,6 +40,18 @@ class Token{
 	}
 
 	Token(){};
+
+	Type getType() {
+		return type;
+	}
+
+	bool hasValue() {
+		return val != NULL;
+	}
+
+	const std::string& getValue() {
+		return *val;
+	}
 };
 
 class Lexer{
@@ -47,9 +59,13 @@ class Lexer{
 
 	FILE* file;
 	char current;
-	bool processed;
 	Token prev;
 	bool consumed = true;
+
+	void advance();
+	void skipWhiteSpace();
+	void parseNonTerminal(std::string& container);
+	void parseTerminal(std::string& container);
 
 	public:
 	
@@ -57,11 +73,6 @@ class Lexer{
 	Lexer(){};
 	Token peek();
 	void consume();
-
-	void advance();
-	void skipWhiteSpace();
-	std::string parseNonTerminal();
-	std::string parseTerminal();
 };
 
 #endif

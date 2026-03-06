@@ -81,12 +81,12 @@ class Ast {
 		int query(const std::string& name) const;
 		const Term& query(int id) const;
 		int size() const;
-	};
-
+		~TermStore();
+	} termStore;
 
 	class RuleStore {
 		std::map<std::string, std::vector<const Rule*>> def;
-		std::vector<const Rule*> v;
+		std::vector<const Rule*> rules;
 
 		public:
 		void insert(const Rule* rule);
@@ -95,11 +95,8 @@ class Ast {
 		const std::vector<const Rule*> &query(const std::string& term) const;
 		const Rule &query(int id) const;
 		int size() const;
-	};
-
-
-	TermStore termStore;
-	RuleStore ruleStore;
+		~RuleStore();
+	} ruleStore;
 
 	bool addRule(const Rule* rule);
 	bool addRules(const std::vector<Rule*> &rules);
@@ -110,20 +107,13 @@ class Ast {
 
 class Parser {
 	private:
-	std::stack<TreeNode*> treeStk;
-	std::stack<int> stateStk;
-	std::map<TreeNode*, const AstNode*> mp;
-	Lexer lexer;
-	Ast* ast;
+	void reduce(int rule, Ast& ast, std::stack<std::pair<TreeNode*, int>>& stk, std::map<TreeNode*, const AstNode*>& mp);
+	void shift(Token tkn, int state, std::stack<std::pair<TreeNode*, int>>& stk);
 
 	public:
 	
-	Parser(Lexer lexer);
-	Parser(){};
-	Ast* parse();
-
-	void reduce(int rule);
-	void shift(Token tkn, int state);
+	Parser() {};
+	Ast* parse(Lexer lexer);
 };
 
 #endif

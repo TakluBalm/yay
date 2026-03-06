@@ -10,7 +10,7 @@ using namespace std;
 
 int convert(Ast *ast, Token t){
 	string str;
-	switch(t.type){
+	switch(t.getType()) {
 	case Type::NON_TERMINAL:
 		str = "nonterminal";
 		break;
@@ -69,39 +69,11 @@ int main(int argc, char** argv){
 		return 1;
 	}
 	Lexer lex(file);
-	Parser parser(lex);
-	Ast* ast = parser.parse();
+	Parser parser;
+	Ast* ast = parser.parse(lex);
 	if(ast != nullptr){
 		map<string, bool> mp;
 		string start = ast->startSymbol();
-		queue<string> q;
-		set<const Term*> allTerms;
-		q.push(start);
-		while(!q.empty()){
-			auto top = q.front(); q.pop();
-			mp[top] = true;
-			const vector<const Rule*>& rules = ast->getDefinition(top);
-			cout << top << ":\n";
-			for(auto rule: rules){
-				vector<const Term*> terms = rule->getTerms();
-				for(auto term: terms){
-					allTerms.insert(term);
-					string sym = term->getName();
-					if(term->type() == term->NONTERMINAL && !mp[sym]){
-						mp[sym] = true;
-						q.push(sym);
-					}
-				}
-				if(terms.empty()){
-					cout << rule->id() << "\t\u03B5\n";
-				}else{
-					cout << rule->id() <<  "\t" << rule->getName() << endl;
-				}
-			}
-		}
-
-		cout << endl << endl;
-
 		StateGenerator sg(*ast);
 
 		if(!sg.generateStateTable()){

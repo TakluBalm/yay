@@ -42,6 +42,7 @@ int Rule::id() const {
 Rule::Rule(){
 	static int cnt = 0;
 	_id = ++cnt;
+	this->nodeType = AstNode::RULE;
 }
 
 const string &Rule::getName() const {
@@ -74,6 +75,7 @@ class Definition : public AstNode {
 	std::vector<Rule*> rules;
 	const Term* lhs;
 	string name;
+	~Definition() {};
 	
 	public:
 	void addRule(Rule* rule){
@@ -102,12 +104,13 @@ class Definition : public AstNode {
 		return rules;
 	}
 
-	const std::string &getName() const {
+	const string &getName() const {
 		return name;
 	}
 
 	Definition(Ast* ast){
 		this->ast = ast;
+		this->nodeType = AstNode::DEFINITION;
 	}
 };
 
@@ -117,11 +120,14 @@ const string &Term::getName() const {
 	return name;
 }
 
-Term::Term(){}
+Term::Term(){
+	this->nodeType = AstNode::TERM;
+}
 
 Term::Term(enum Type type, const string& name){
 	this->_type = type;
 	this->name = name;
+	this->nodeType = AstNode::TERM;
 }
 
 /******* TermStore ********/
@@ -174,6 +180,12 @@ int Ast::TermStore::size() const {
 	return terms.size();
 }
 
+Ast::TermStore::~TermStore() {
+	for (auto term: terms) {
+		delete term;
+	}
+}
+
 /****** AST *******/
 
 bool Ast::addRule(const Rule* rule){
@@ -203,6 +215,7 @@ const vector<const Rule*>& Ast::getDefinition(const Term *nt) const {
 }
 
 const string &Ast::startSymbol() const {
+	// This has to be allocated somewhere.
 	static string str = "S'";
 	return str;
 }
@@ -213,10 +226,10 @@ void Ast::RuleStore::insert(const Rule* rule){
 	const Term *t = rule->lhs();
 	def[t->getName()].push_back(rule);
 	int id = rule->id();
-	if(v.size() < id+1){
-		v.resize(id+1);
+	if(this->rules.size() < id+1){
+		this->rules.resize(id+1);
 	}
-	v[id] = rule;
+	this->rules[id] = rule;
 }
 
 void Ast::RuleStore::insert(const vector<Rule*> &rules){
@@ -228,10 +241,10 @@ void Ast::RuleStore::insert(const vector<Rule*> &rules){
 	for(auto rule: rules){
 		vec.push_back(rule);
 		int id = rule->id();
-		if(v.size() < id+1){
-			v.resize(id+1);
+		if(this->rules.size() < id+1){
+			this->rules.resize(id+1);
 		}
-		v[id] = rule;
+		this->rules[id] = rule;
 	}
 }
 
@@ -250,15 +263,22 @@ const vector<const Rule*> &Ast::RuleStore::query(const string &name) const {
 }
 
 const Rule &Ast::RuleStore::query(int id) const {
-	return *(v[id]);
+	return *(rules[id]);
 }
 
 int Ast::RuleStore::size() const {
 	return def.size();
 }
 
+Ast::RuleStore::~RuleStore() {
+	for (auto rule: rules) {
+		delete rule;
+	}
+}
+
 /****** TABLES ********/
 
+// State transition table. Rows are states, columns are lookahead.
 static const char table[24][17] = {
 	{3 , -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1 , 2 , -1, -1, -1},
 	{3 , -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 24, -1, 4 , -1, -1, -1},
@@ -286,6 +306,7 @@ static const char table[24][17] = {
 	{12, -1, 12, 12, 12, 12, 12, 12, 12, 12, 12, -1, -1, -1, -1, -1, -1}
 };
 
+// Action table. Contains the action to perform along with state transition.
 static const enum Action actionTable[24][17] = {
 	{S, N, N, N, N, N, N, N, N, N, N, N, G, G, N, N, N},
 	{S, N, N, N, N, N, N, N, N, N, N, A, N, G, N, N, N},
@@ -315,7 +336,7 @@ static const enum Action actionTable[24][17] = {
 
 /******* PARSER *********/
 
-void Parser::reduce(int rule){
+void Parser::reduce(int rule, Ast& ast, stack<pair<TreeNode*, int>>& stk, map<TreeNode*, const AstNode*>& tNodeToAstNodeMap){
 	int popNum;
 	enum Type type;
 	switch(rule){
@@ -378,9 +399,8 @@ void Parser::reduce(int rule){
 	node->token = Token(type);
 
 	while(popNum--){
-		node->children.push_back(treeStk.top());
-		stateStk.pop();
-		treeStk.pop();
+		node->children.push_back(stk.top().first);
+		stk.pop();
 	}
 
 	reverse(node->children.begin(), (*node).children.end());
@@ -388,115 +408,115 @@ void Parser::reduce(int rule){
 	switch(rule){
 		case 8:
 		case 9:{
-			Term::Type t = (node->children[0]->token.type == TERMINAL)?Term::Type::TERMINAL:Term::Type::NONTERMINAL;
-			string& name = *node->children[0]->token.val;
+			Term::Type t = (node->children[0]->token.getType() == TERMINAL)?Term::Type::TERMINAL:Term::Type::NONTERMINAL;
+			const string& name = node->children[0]->token.getValue();
 			const Term* term;
-			if(ast->termStore.query(name) == -1){
+			if(ast.termStore.query(name) == -1){
 				term = new Term(t, name);
-				ast->termStore.insert(term);
+				ast.termStore.insert(term);
 			} else {
-				term = &ast->termStore.query(ast->termStore.query(name));
+				term = &ast.termStore.query(ast.termStore.query(name));
 			}
 
-			mp[node] = term;
+			tNodeToAstNodeMap[node] = term;
 			break;
 		}
 
 		case 7:{
-			Term* term = (Term*)(mp[node->children[0]]);
+			Term* term = (Term*)(tNodeToAstNodeMap[node->children[0]]);
 			Rule* rule = new Rule();
 			rule->addTerm(term);
 
-			mp[node] = rule;
+			tNodeToAstNodeMap[node] = rule;
 			break;
 		}
 		case 6:{
-			Term* term = (Term*)(mp[node->children[1]]);
-			Rule* rule = (Rule*)(mp[node->children[0]]);
+			Term* term = (Term*)(tNodeToAstNodeMap[node->children[1]]);
+			Rule* rule = (Rule*)(tNodeToAstNodeMap[node->children[0]]);
 			rule->addTerm(term);
 
-			mp[node] = rule;
+			tNodeToAstNodeMap[node] = rule;
 			break;
 		}
 
 		case 5:{
-			Definition* def = new Definition(ast);
-			Rule* rule = (Rule*)(mp[node->children[0]]);
+			Definition* def = new Definition(&ast);
+			Rule* rule = (Rule*)(tNodeToAstNodeMap[node->children[0]]);
 			def->addRule(rule);
 
-			mp[node] = def;
+			tNodeToAstNodeMap[node] = def;
 			break;
 		}
 		case 4:{
-			Definition* def = (Definition*)(mp[node->children[0]]);
-			Rule* rule = (Rule*)(mp[node->children[2]]);
+			Definition* def = (Definition*)(tNodeToAstNodeMap[node->children[0]]);
+			Rule* rule = (Rule*)(tNodeToAstNodeMap[node->children[2]]);
 			def->addRule(rule);
 
-			mp[node] = def;
+			tNodeToAstNodeMap[node] = def;
 			break;
 		}
 
 		case 3:{
-			Definition& def = *(Definition*)(mp[node->children[2]]);
-			string &name = *(node->children[0]->token.val);
-			int id = ast->termStore.query(name);
-			const Term* term = (id == -1)?(new Term(Term::NONTERMINAL, name)):&(ast->termStore.query(id));
+			Definition& def = *(Definition*)(tNodeToAstNodeMap[node->children[2]]);
+			const string& name = node->children[0]->token.getValue();
+			int id = ast.termStore.query(name);
+			const Term* term = (id == -1)?(new Term(Term::NONTERMINAL, name)):&(ast.termStore.query(id));
 
 			def.setLHS(term);
 
 			for(auto rule: def.getRules()){
 				rule->userProvided = true;
 			}
-			ast->addRules(def.getRules());
+			ast.addRules(def.getRules());
 
-			mp[node] = &def;
+			tNodeToAstNodeMap[node] = &def;
 			break;
 		}
 
 		case 10:{
-			Definition& def = *(Definition*)(mp[node->children[1]]);
+			Definition& def = *(Definition*)(tNodeToAstNodeMap[node->children[1]]);
 			const string& name = "(" + def.getName() + ")";
 			const Term* term;
-			if(ast->termStore.query(name) == -1){
+			if(ast.termStore.query(name) == -1){
 				term = new Term(Term::NONTERMINAL, name);
-				ast->termStore.insert(term);
+				ast.termStore.insert(term);
 			} else {
-				term = &ast->termStore.query(ast->termStore.query(name));
+				term = &ast.termStore.query(ast.termStore.query(name));
 			}
 
 			def.setLHS(term);
-			ast->addRules(def.getRules());
+			ast.addRules(def.getRules());
 
-			mp[node] = term;
+			tNodeToAstNodeMap[node] = term;
 			break;
 		}
 		case 11:{
-			Definition& def = *(Definition*)(mp[node->children[1]]);
+			Definition& def = *(Definition*)(tNodeToAstNodeMap[node->children[1]]);
 			const string& name = "[" + def.getName() + "]";
 			const Term* term;
-			if(ast->termStore.query(name) == -1){
+			if(ast.termStore.query(name) == -1){
 				term = new Term(Term::NONTERMINAL, name);
-				ast->termStore.insert(term);
+				ast.termStore.insert(term);
 			} else {
-				term = &ast->termStore.query(ast->termStore.query(name));
+				term = &ast.termStore.query(ast.termStore.query(name));
 			}
 
 			def.addRule(new Rule());
 			def.setLHS(term);
-			ast->addRules(def.getRules());
+			ast.addRules(def.getRules());
 
-			mp[node] = term;
+			tNodeToAstNodeMap[node] = term;
 			break;
 		}
 		case 12:{
-			Definition& def = *(Definition*)(mp[node->children[1]]);
+			Definition& def = *(Definition*)(tNodeToAstNodeMap[node->children[1]]);
 			const string& name = "{" + def.getName() + "}";
 			const Term* term;
-			if(ast->termStore.query(name) == -1){
+			if(ast.termStore.query(name) == -1){
 				term = new Term(Term::NONTERMINAL, name);
-				ast->termStore.insert(term);
+				ast.termStore.insert(term);
 			} else {
-				term = &ast->termStore.query(ast->termStore.query(name));
+				term = &ast.termStore.query(ast.termStore.query(name));
 			}
 
 			for(auto rule: def.getRules()){
@@ -505,9 +525,9 @@ void Parser::reduce(int rule){
 
 			def.addRule(new Rule());
 			def.setLHS(term);
-			ast->addRules(def.getRules());
+			ast.addRules(def.getRules());
 
-			mp[node] = term;
+			tNodeToAstNodeMap[node] = term;
 			break;
 		}
 
@@ -515,47 +535,40 @@ void Parser::reduce(int rule){
 			break;
 		}
 		case 2:{
-			Definition* def = (Definition*)(mp[node->children[0]]);
+			Definition* def = (Definition*)(tNodeToAstNodeMap[node->children[0]]);
 			Rule* rule = new Rule();
-			int id = ast->termStore.query(&def->getLHS());
+			int id = ast.termStore.query(&def->getLHS());
 			
 			const Term* term;
 			if(id == -1){
 				term = new Term(Term::NONTERMINAL, def->getLHS().getName());
-				ast->termStore.insert(term);
+				ast.termStore.insert(term);
 			} else {
-				term = &ast->termStore.query(id);
+				term = &ast.termStore.query(id);
 			}
 			rule->addTerm(term);
-			rule->lhs(&ast->termStore.query(ast->termStore.query(ast->startSymbol())));
+			rule->lhs(&ast.termStore.query(ast.termStore.query(ast.startSymbol())));
 
-			ast->addRule(rule);
+			ast.addRule(rule);
 			break;
 		}
 
 	}
 
-	int state = table[stateStk.top()][type];
+	int state = table[stk.top().second][type];
 
-	treeStk.push(node);
-	stateStk.push(state);
+	stk.push({node, state});
 }
 
-void Parser::shift(Token tkn, int state){
+void Parser::shift(Token tkn, int state, stack<pair<TreeNode*, int>>& stk){
 	TreeNode* n = new TreeNode();
 	n->token = tkn;
-	treeStk.push(n);
-	stateStk.push(state);
-}
-
-Parser::Parser(Lexer l){
-	lexer = l;
-	ast = new Ast();
+	stk.push({n, state});
 }
 
 static void deleteTree(TreeNode* root){
-	if(root->token.val != nullptr){
-		delete root->token.val;
+	if(root->token.hasValue()){
+		delete &root->token.getValue();
 	}
 	for(auto child: root->children){
 		deleteTree(child);
@@ -563,31 +576,42 @@ static void deleteTree(TreeNode* root){
 	delete root;
 }
 
-Ast* Parser::parse(){
-	stateStk.push(0);
+Ast* Parser::parse(Lexer lexer){
+	map<TreeNode*, const AstNode*> treeNodeToAstNodeMap;
+	stack<pair<TreeNode*, int>> stk;
+	Ast &ast = *new Ast();
+	
+	stk.push({NULL, 0});
 	while(true){
 		Token tkn = lexer.peek();
-		int state = stateStk.top();
-		enum Action action = actionTable[state][tkn.type];
-		int val = table[state][tkn.type];
+		int state = stk.top().second;
+		enum Action action = actionTable[state][tkn.getType()];
+		int val = table[state][tkn.getType()];
 		if(action == R){
-			reduce(val);
+			reduce(val, ast, stk, treeNodeToAstNodeMap);
 			continue;
 		}
 		if(action == A){
-			TreeNode* root = treeStk.top();
-			treeStk.pop();
-			stateStk.pop();
+			TreeNode* root = stk.top().first;
+			stk.pop();
 
 			deleteTree(root);
-			mp.clear();
 
-			return ast;
+			return &ast;
 		}
 		if(action == N){
+			while (!stk.empty()) {
+				if (stk.top().first != NULL) {
+					deleteTree(stk.top().first);
+				}
+				stk.pop();
+			}
+
+			delete &ast;
+
 			return nullptr;
 		}
-		shift(tkn, val);
+		shift(tkn, val, stk);
 		lexer.consume();
 	}
 }
